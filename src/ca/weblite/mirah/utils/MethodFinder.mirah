@@ -36,3 +36,20 @@ class ElemAssignFinder < NodeScanner
   
 end
 
+class AttrAssignFinder < NodeScanner
+  def initialize
+    @results = ArrayList.new
+    
+  end
+  
+  def enterAttrAssign(node, arg)
+    @results.add node
+    super(node, arg)
+  end
+  
+  def results:AttrAssign[]
+    @results.toArray(AttrAssign[0])
+  end
+  
+end
+

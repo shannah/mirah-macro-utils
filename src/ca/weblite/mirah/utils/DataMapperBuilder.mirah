@@ -20,10 +20,15 @@ import org.mirah.typer.ResolvedType
 import org.mirah.typer.DerivedFuture
 import org.mirah.jvm.mirrors.ArrayType
 import org.mirah.jvm.types.JVMType
+import org.mirah.jvm.types.MemberKind
+import org.mirah.jvm.types.Flags
 import org.mirah.jvm.mirrors.BytecodeMirror
 import org.mirah.jvm.mirrors.MirahMethod
 import org.mirah.jvm.mirrors.Member
 import org.objectweb.asm.signature.SignatureReader
+import org.objectweb.asm.Opcodes
+import java.util.HashSet
+import org.mirah.util.AstFormatter
 
 /**
  *
@@ -52,6 +57,7 @@ class DataMapperBuilder
     cls = @mirah.quote do
       import ca.weblite.codename1.mapper.DataMapper
 
+      
       import java.util.Map
       class `@mapperClass` < DataMapper
         def init:void
@@ -106,9 +112,13 @@ class DataMapperBuilder
     
     readMapBody = NodeList.new
     
-    mtype.getAllDeclaredMethods.each do | method:JVMMethod |
-      if isSetter(method)
-        o = method.argumentTypes.get(0)
+    getMethodDefinitions(mtype).each do | method:JVMMethod |
+      if isSetter(method) or isField(method)
+        o = if isField(method)
+          method.returnType
+        else
+          method.argumentTypes.get(0)
+        end
         signatureStruct=nil
         if method.kind_of? Member
           signature = Member(method).signature
@@ -149,10 +159,13 @@ class DataMapperBuilder
           
         end
         
-        
-        
         #puts "O class is #{o.getClass}"
-        propName = SimpleString.new(getPropNameFromSetter(method.name))
+        propName = if isField(method)
+          SimpleString.new(method.name)
+        else
+          SimpleString.new(getPropNameFromSetter(method.name))
+        end
+        
         #puts "Resolved type #{resolved.name}"
         
         typeref = if is_array
@@ -311,25 +324,62 @@ class DataMapperBuilder
           @mirah.quote { dest }
         )
         
-        if listType.assignableFrom(resolved) and tmpVector
-          n = @mirah.quote do
-            if exists(src, `propName`)
-              `tmpDest`.`"#{method.name}"` `tmpVector`
-            end  
+        if isField(method)
+          tmpOut = @mirah.quote{`gensym`}
+          if listType.assignableFrom(resolved) and tmpVector
+            n = @mirah.quote do
+              if exists(src, `propName`)
+                tempdest.foo = `tmpVector`
+              end  
+            end
+          elsif mapType.assignableFrom(resolved) and tmpMap
+            n = @mirah.quote do
+              if exists(src, `propName`)
+                tempdest.foo = `tmpMap`
+              end  
+            end
+          else
+            n = @mirah.quote do
+              if exists(src, `propName`)
+                tempdest.foo =`tmpScalar`
+              end  
+            end
           end
-        elsif mapType.assignableFrom(resolved) and tmpMap
-          n = @mirah.quote do
-            if exists(src, `propName`)
-              `tmpDest`.`"#{method.name}"` `tmpMap`
-            end  
-          end
+          
+          
+          afinder = AttrAssignFinder.new
+          n.accept afinder, nil
+          #puts "Results #{afinder.results}"
+          attrAssign = afinder.results[0]
+          attrAssign.target = tmpDest
+          attrAssign.name = SimpleString.new(method.name)
+          #puts AstFormatter.new(attrAssign)
+          #puts AstFormatter.new(n)
+          
+          
+          
         else
-          n = @mirah.quote do
-            if exists(src, `propName`)
-              `tmpDest`.`"#{method.name}"` `tmpScalar`
-            end  
+          if listType.assignableFrom(resolved) and tmpVector
+            n = @mirah.quote do
+              if exists(src, `propName`)
+                `tmpDest`.`"#{method.name}"` `tmpVector`
+              end  
+            end
+          elsif mapType.assignableFrom(resolved) and tmpMap
+            n = @mirah.quote do
+              if exists(src, `propName`)
+                `tmpDest`.`"#{method.name}"` `tmpMap`
+              end  
+            end
+          else
+            n = @mirah.quote do
+              if exists(src, `propName`)
+                `tmpDest`.`"#{method.name}"` `tmpScalar`
+              end  
+            end
           end
         end
+          
         
         readMapBody.add n
       end
@@ -354,6 +404,9 @@ class DataMapperBuilder
   end
   
   def isSetter(method:JVMMethod):boolean
+    if method.kind != MemberKind.METHOD
+      return false
+    end
     if !method.name.startsWith('set') and !method.name.endsWith('_set')
       return false
     end
@@ -361,6 +414,10 @@ class DataMapperBuilder
       return false
     end
     true
+  end
+  
+  def isField(method:JVMMethod):boolean
+    return method.kind == MemberKind.FIELD_ACCESS
   end
   
   def box(type:TypeFuture):DerivedFuture
@@ -378,6 +435,41 @@ class DataMapperBuilder
       'boolean[]'.equals(name)
   end
   
+  # Gets all public member methods, and all public member fields of the 
+  # given type.
+  def getMethodDefinitions(type:MirrorType):JVMMethod[]
+    out = []
+    type.getDeclaredFields.each{|f| out.add f}
+    type.getAllDeclaredMethods.each{|m| out.add m}
+    getMethodDefinitions(MirrorType(type.superclass)).each{ |m| out.add m} unless !type.superclass.kind_of? MirrorType
+    filtered = []
+    usedNames = HashSet.new
+    out.each do |m|
+      mdef = JVMMethod(m)
+      
+      if mdef.kind_of? Member
+        member = Member(mdef)
+        unless member.flags & Opcodes.ACC_PUBLIC
+          next
+        end
+      else
+        next
+      end
+      
+      unless [MemberKind.METHOD, MemberKind.FIELD_ACCESS].contains(mdef.kind)
+        next
+      end
+      
+      if !usedNames.contains mdef.name
+        usedNames.add mdef.name
+        filtered.add mdef
+      end
+    end
+    filtered.toArray(JVMMethod[0])
+  end
   
+  def gensym: String
+    @mirah.scoper.getScope(@call).temp('gensym')
+  end
 end
 
