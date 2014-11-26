@@ -111,10 +111,26 @@ class DataMapperBuilder
     #puts "M type is #{mtype}"
     
     readMapBody = NodeList.new
+    writeMapBody = NodeList.new
     
-    getMethodDefinitions(mtype).each do | method:JVMMethod |
-      if isSetter(method) or isField(method)
-        o = if isField(method)
+    TypeUtil.getPublicPropertiesAndAccessors(mtype).each do |method|
+      propName = SimpleString.new(TypeUtil.getPropNameFromGetter(method.name))
+      puts "Prop name is #{propName}"
+      tmpSrc = Cast.new(
+          @call.position,
+          @klass.typeref,
+          @mirah.quote { src }
+        )
+      n = @mirah.quote do
+        set(dest, `propName`, `tmpSrc`.`"#{method.name}"`)
+      end
+      writeMapBody.add(n)
+    end
+    writeMap.body.add writeMapBody
+    
+    TypeUtil.getMethodDefinitions(mtype).each do | method:JVMMethod |
+      if TypeUtil.isSetter(method) or TypeUtil.isField(method)
+        o = if TypeUtil.isField(method)
           method.returnType
         else
           method.argumentTypes.get(0)
@@ -160,10 +176,10 @@ class DataMapperBuilder
         end
         
         #puts "O class is #{o.getClass}"
-        propName = if isField(method)
+        propName = if TypeUtil.isField(method)
           SimpleString.new(method.name)
         else
-          SimpleString.new(getPropNameFromSetter(method.name))
+          SimpleString.new(TypeUtil.getPropNameFromSetter(method.name))
         end
         
         #puts "Resolved type #{resolved.name}"
@@ -235,7 +251,7 @@ class DataMapperBuilder
             typeref, 
             @mirah.quote{getDate(src, `propName`)}
           )
-        elsif isPrimitiveArray(resolved.name)
+        elsif TypeUtil.isPrimitiveArray(resolved.name)
           
           @mirah.quote do
             to_primitive_array(get(src, `propName`), `componentTypeRef`)
@@ -324,7 +340,7 @@ class DataMapperBuilder
           @mirah.quote { dest }
         )
         
-        if isField(method)
+        if TypeUtil.isField(method)
           tmpOut = @mirah.quote{`gensym`}
           if listType.assignableFrom(resolved) and tmpVector
             n = @mirah.quote do
@@ -392,80 +408,26 @@ class DataMapperBuilder
     
   end
   
-  def getPropNameFromSetter(methodName:String):String
-    if methodName.endsWith '_set'
-      return methodName.substring(0, methodName.lastIndexOf('_'))
-    elsif methodName.startsWith 'set'
-      substr = methodName.substring(3)
-      return "#{substr.charAt(0)}".toLowerCase + substr.substring(1)
-    else
-      raise "#{methodName} is not a setter method"
-    end
-  end
   
-  def isSetter(method:JVMMethod):boolean
+  
+  def isGetter(method:JVMMethod):boolean
     if method.kind != MemberKind.METHOD
       return false
     end
-    if !method.name.startsWith('set') and !method.name.endsWith('_set')
+    if method.argumentTypes.size != 0
       return false
     end
-    if method.argumentTypes.size != 1
+    if 'void'.equals(method.returnType.name)
       return false
     end
+      
     true
   end
   
-  def isField(method:JVMMethod):boolean
-    return method.kind == MemberKind.FIELD_ACCESS
-  end
+  
   
   def box(type:TypeFuture):DerivedFuture
     @types.box(type)
-  end
-  
-  def isPrimitiveArray(name:String):boolean
-    return 'int[]'.equals(name) ||
-      'double[]'.equals(name) ||
-      'short[]'.equals(name) ||
-      'long[]'.equals(name) ||
-      'float[]'.equals(name) ||
-      'byte[]'.equals(name) ||
-      'char[]'.equals(name) ||
-      'boolean[]'.equals(name)
-  end
-  
-  # Gets all public member methods, and all public member fields of the 
-  # given type.
-  def getMethodDefinitions(type:MirrorType):JVMMethod[]
-    out = []
-    type.getDeclaredFields.each{|f| out.add f}
-    type.getAllDeclaredMethods.each{|m| out.add m}
-    getMethodDefinitions(MirrorType(type.superclass)).each{ |m| out.add m} unless !type.superclass.kind_of? MirrorType
-    filtered = []
-    usedNames = HashSet.new
-    out.each do |m|
-      mdef = JVMMethod(m)
-      
-      if mdef.kind_of? Member
-        member = Member(mdef)
-        unless member.flags & Opcodes.ACC_PUBLIC
-          next
-        end
-      else
-        next
-      end
-      
-      unless [MemberKind.METHOD, MemberKind.FIELD_ACCESS].contains(mdef.kind)
-        next
-      end
-      
-      if !usedNames.contains mdef.name
-        usedNames.add mdef.name
-        filtered.add mdef
-      end
-    end
-    filtered.toArray(JVMMethod[0])
   end
   
   def gensym: String
