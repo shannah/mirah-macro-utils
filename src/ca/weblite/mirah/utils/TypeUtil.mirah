@@ -12,8 +12,10 @@ import org.mirah.jvm.mirrors.Member
 import org.objectweb.asm.Opcodes
 import org.mirah.typer.DerivedFuture
 import org.mirah.typer.TypeFuture
+import java.util.Map
+import java.util.Collection
 import org.mirah.jvm.mirrors.MirrorType
-
+import java.util.HashMap
 
 /**
  *
@@ -164,7 +166,7 @@ class TypeUtil
     usedNames = HashSet.new
     getPublicMethods(type).each do |m|
       pname = getPropNameFromGetter(m.name)
-      puts "Checking pub method #{m}"
+      #puts "Checking pub method #{m}"
       if m.name.length > 3 and m.name.startsWith('get') and
       
       
@@ -187,6 +189,8 @@ class TypeUtil
   end
   
   def self.getPublicPropertiesAndAccessors(type:MirrorType):JVMMethod[]
+    
+    #puts "Getting publiePropertiesAndAccessors"
     out = []
     usedNames = HashSet.new
     getAccessors(type).each do |m| 
@@ -206,6 +210,7 @@ class TypeUtil
     end
     
     out.toArray(JVMMethod[0])
+    
   end
   
   
@@ -218,6 +223,22 @@ class TypeUtil
       return false
     end
     if method.argumentTypes.size != 1
+      return false
+    end
+    true
+  end
+  
+  def self.isGetter(method:JVMMethod):boolean
+    if method.kind != MemberKind.METHOD
+      return false
+    end
+    if !method.name.startsWith('get') or method.name.length < 4
+      return false
+    end
+    if method.argumentTypes.size != 0
+      return false
+    end
+    if 'void'.equals method.returnType.name
       return false
     end
     true
@@ -291,6 +312,58 @@ class TypeUtil
     else
       return methodName
     end
+  end
+  
+  
+  /**
+   * Returns a Map that maps property names to a map of the form:
+   *  {'property' => JVMMethod, 'getter' => JVMMethod, 'setter' => JVMMethod} 
+   */
+  def self.getPropertiesAsMap(type:MirrorType):Map
+    
+    out = {}
+    props = HashSet.new
+    getPublicProperties(type).each do |p| 
+      out.put(p.name, { 'property' => p })
+      props.add(p)
+    end
+    
+    getPublicMethods(type).each do |m|
+      if isSetter(m)
+        propName = getPropNameFromSetter(m.name)
+        propMap = Map(out.get(propName)) || {}
+        if !propMap['setter']
+          propMap['setter'] = m
+          out[propName] = propMap
+        end
+      elsif isGetter(m) or findMatchingProperty(m, props) != nil
+        propName = getPropNameFromGetter(m.name)
+        propMap = Map(out.get(propName)) || {}
+        if !propMap['getter']
+          propMap['getter'] = m
+          out[propName] = propMap
+        end
+      end
+    end
+    
+    out
+    
+  end
+  
+  # Finds matching property from a set of properties for a given getter method.
+  # In this case the getter method will be a method with the same name as the 
+  # property (i.e. not getProp, it is just prop())
+  def self.findMatchingProperty(method:JVMMethod, properties:Collection):JVMMethod
+    return nil if method.argumentTypes.size > 0
+    property = nil
+    properties.each do |o|
+      p=JVMMethod(o)
+      if p.name.equals(method.name) and p.returnType and p.returnType.equals(method.returnType)
+        property = p
+        break
+      end
+    end
+    property
   end
   
 end

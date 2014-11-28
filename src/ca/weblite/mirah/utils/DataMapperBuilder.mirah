@@ -112,7 +112,7 @@ class DataMapperBuilder
     
     readMapBody = NodeList.new
     writeMapBody = NodeList.new
-    
+    #puts "on line 115 #{TypeUtil.getPublicPropertiesAndAccessors(mtype)}"
     TypeUtil.getPublicPropertiesAndAccessors(mtype).each do |method|
       propName = SimpleString.new(TypeUtil.getPropNameFromGetter(method.name))
       puts "Prop name is #{propName}"
