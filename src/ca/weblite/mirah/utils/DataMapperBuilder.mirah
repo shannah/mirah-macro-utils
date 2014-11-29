@@ -115,7 +115,7 @@ class DataMapperBuilder
     #puts "on line 115 #{TypeUtil.getPublicPropertiesAndAccessors(mtype)}"
     TypeUtil.getPublicPropertiesAndAccessors(mtype).each do |method|
       propName = SimpleString.new(TypeUtil.getPropNameFromGetter(method.name))
-      puts "Prop name is #{propName}"
+      #puts "Prop name is #{propName}"
       tmpSrc = Cast.new(
           @call.position,
           @klass.typeref,
