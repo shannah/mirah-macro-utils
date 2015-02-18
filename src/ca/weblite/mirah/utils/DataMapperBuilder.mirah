@@ -1,9 +1,18 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ *  Copyright 2014 Steve Hannah
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
  */
-
 package ca.weblite.mirah.utils
 import org.mirah.typer.Typer
 import org.mirah.typer.Scope
@@ -31,10 +40,19 @@ import java.util.HashSet
 import org.mirah.util.AstFormatter
 
 /**
- *
+ * A class for building DataMapper objects  This is meant to be used by the 
+ * data_mapper macro.  Encapsulating it in a separate class makes it easier to 
+ * manage.
  * @author shannah
  */
 class DataMapperBuilder 
+  
+  /**
+   * @param mirah Reference to the mirah compiler.  Taken from the macro.
+   * @param call The call site.  Taken from the macro.
+   * @param klass The class to create a mapper for.
+   * @param mapperClass The name of the class that should be created.
+   */
   def initialize(mirah:Compiler, call:CallSite, klass:TypeName, mapperClass:TypeName)
     @mirah=mirah
     @typer = @mirah.typer
@@ -49,11 +67,16 @@ class DataMapperBuilder
     
   end
   
+  /**
+   * Builds a data mapper and returns the Node that can be added to the AST.  
+   */
   def build:Node
     
     classTypeFuture = @types.get(@scope, @klass.typeref)
     classTypeResolved = classTypeFuture.resolve
     
+    # Begin by creating the skeleton of the Mapper class with stubs
+    # for the methods that we will fill in later.
     cls = @mirah.quote do
       import ca.weblite.codename1.mapper.DataMapper
 
@@ -73,6 +96,7 @@ class DataMapperBuilder
       end
     end
     
+    # Obtain references to some common class types that we will need.
     listType = @types.wrap(
         Type.getType('Ljava/util/List;')
     ).resolve
@@ -110,10 +134,20 @@ class DataMapperBuilder
     #puts "Class type is #{classType}"
     #puts "M type is #{mtype}"
     
+    # Create nodes for the bodies of readMap and writeMap
     readMapBody = NodeList.new
     writeMapBody = NodeList.new
+    
     #puts "on line 115 #{TypeUtil.getPublicPropertiesAndAccessors(mtype)}"
+    
+    # Create the body for the writeMap() method.
+    # Just loop through all public properties and accessor methods
+    # and call the set(Map,String,Object) method on each with the passed
+    # Map object.
     TypeUtil.getPublicPropertiesAndAccessors(mtype).each do |method|
+      next if "getClass".equals(method.name) 
+        #getClass isn't the kind of accessor we're looking for
+      
       propName = SimpleString.new(TypeUtil.getPropNameFromGetter(method.name))
       #puts "Prop name is #{propName}"
       tmpSrc = Cast.new(
@@ -128,6 +162,10 @@ class DataMapperBuilder
     end
     writeMap.body.add writeMapBody
     
+    
+    # Create the body for the readMap() method. 
+    # Just loop through all setter methods and public properties
+    # and get corresponding values from the Map.
     TypeUtil.getMethodDefinitions(mtype).each do | method:JVMMethod |
       if TypeUtil.isSetter(method) or TypeUtil.isField(method)
         o = if TypeUtil.isField(method)
