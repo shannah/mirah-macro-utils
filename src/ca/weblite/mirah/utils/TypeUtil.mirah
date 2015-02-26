@@ -152,7 +152,7 @@ class TypeUtil
         end
       end
     end
-    out.toArray(JVMMethod[0])
+    out.toArray(JVMMethod[out.size])
   end
   
   def self.getAccessorsFor(type:MirrorType, properties:JVMMethod[]):JVMMethod[]
@@ -167,7 +167,7 @@ class TypeUtil
         end
       end
     end
-    candidates.toArray(JVMMethod[0])
+    candidates.toArray(JVMMethod[candidates.size])
   end
   
   def self.getAccessors(type:MirrorType):JVMMethod[]
@@ -194,7 +194,7 @@ class TypeUtil
       end
       
     end
-    candidates.toArray(JVMMethod[0])
+    candidates.toArray(JVMMethod[candidates.size])
   end
   
   def self.getPublicPropertiesAndAccessors(type:MirrorType):JVMMethod[]
@@ -218,7 +218,7 @@ class TypeUtil
       
     end
     
-    out.toArray(JVMMethod[0])
+    out.toArray(JVMMethod[out.size])
     
   end
   

@@ -177,14 +177,17 @@ class DataMapperBuilder
         if method.kind_of? Member
           signature = Member(method).signature
           if signature 
-            #puts "Reading signature #{signature}"
+            #puts "Reading signature #{signature} for #{method.name}"
             reader = SignatureReader.new(signature.toString)
             visitor = BaseSignatureVisitor.new(1)
             reader.accept visitor
             signatureStruct = visitor.getParameters
+          else
+            #puts "#{method.name} has no signature"
           end
           
         else
+          #puts "Method #{method.name} is of type #{method.getClass}"
           nil
         end
         
@@ -327,7 +330,7 @@ class DataMapperBuilder
           else
             nil
           end
-          if !paramStruct.getParameters.isEmpty
+          if paramStruct and !paramStruct.getParameters.isEmpty
             pType = paramStruct.getParameters[0].type
             componentTypeRef = TypeRefImpl.new(pType.getClassName, false, true, @call.target.position)
             
@@ -341,7 +344,7 @@ class DataMapperBuilder
           else
             nil
           end
-          if params.size == 2
+          if params and params.size == 2
             keyTypeRef = TypeRefImpl.new(params.get(0).type.getClassName, false, true, @call.target.position)
             valTypeRef = TypeRefImpl.new(params.get(1).type.getClassName, false, true, @call.target.position)
           end
