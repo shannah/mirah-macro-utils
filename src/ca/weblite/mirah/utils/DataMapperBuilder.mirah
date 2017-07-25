@@ -298,7 +298,6 @@ class DataMapperBuilder
             to_primitive_array(get(src, `propName`), `componentTypeRef`)
           end
         elsif 'java.lang.String[]'.equals resolved.name
-          #puts 'Resolving String array'
           @mirah.quote do
             to_string_array(get(src, `propName`))
           end
@@ -309,7 +308,7 @@ class DataMapperBuilder
           end
         elsif is_array
           @mirah.quote do
-            cast_array getObjects(src, `propName`, `componentTypeRef`.class).toArray, `componentTypeRef`
+            cast_array DataMapper.toArray(getObjects(src, `propName`, `componentTypeRef`.class)), `componentTypeRef`
           end
         else
           #puts 'Default resolve for '+propName
@@ -437,8 +436,18 @@ class DataMapperBuilder
           end
         end
           
-        
-        readMapBody.add n
+        readMapBody.add @mirah.quote do
+          if DataMapper.DEBUG
+            System.out.print(`propName`)
+            System.out.print(":");
+            if exists(src, `propName`)
+              System.out.println("exists")
+            end
+          end
+        end
+        if n
+          readMapBody.add n
+        end
       end
     end
     

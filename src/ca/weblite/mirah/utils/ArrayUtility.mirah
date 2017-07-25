@@ -48,8 +48,10 @@ class ArrayUtility
   
   def to_string_array(target:Node):Node
     @mirah.quote do
-      if `target`.kind_of? java::util::List
-        cast_array(java::util::List(`target`).toArray, String)
+      if `target` == nil
+        nil
+      elsif `target`.kind_of? java::util::List
+        cast_array(DataMapper.toArray(java::util::List(`target`)), String)
       elsif `target`.kind_of? Object[]
         cast_array(Object[].cast(`target`), String)
       else
